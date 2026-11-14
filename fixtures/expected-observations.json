@@ -1,0 +1,20 @@
+[
+  {
+    "kind": "language-observation",
+    "value": {
+      "product": "p1",
+      "requestedLanguage": "th",
+      "actualLanguage": "en",
+      "state": "fallback"
+    }
+  },
+  {
+    "kind": "language-observation",
+    "value": {
+      "product": "p1",
+      "requestedLanguage": "zh-HK",
+      "actualLanguage": "zh-HK",
+      "state": "confirmed"
+    }
+  }
+]

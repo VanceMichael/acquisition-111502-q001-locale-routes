@@ -1,0 +1,56 @@
+{
+  "/files/catalog.html": {
+    "file": "catalog.html",
+    "mediaType": "text/html; charset=utf-8"
+  },
+  "/files/en.html": {
+    "file": "en.html",
+    "mediaType": "text/html; charset=utf-8"
+  },
+  "/files/hk.html": {
+    "file": "hk.html",
+    "mediaType": "text/html; charset=utf-8"
+  },
+  "/deliveries": {
+    "file": "delivery.json",
+    "mediaType": "application/json"
+  },
+  "/catalog": {
+    "file": "catalog.html",
+    "mediaType": "text/html; charset=utf-8"
+  },
+  "/pages/item/en": {
+    "file": "en.html",
+    "mediaType": "text/html; charset=utf-8",
+    "headers": {
+      "content-language": "en"
+    }
+  },
+  "/pages/item/th": {
+    "redirect": "/pages/item/en",
+    "stages": {
+      "translated": {
+        "redirect": null,
+        "file": "th.html",
+        "mediaType": "text/html; charset=utf-8",
+        "headers": {
+          "content-language": "th"
+        }
+      }
+    }
+  },
+  "/pages/item/zh-hk": {
+    "file": "hk.html",
+    "mediaType": "text/html; charset=utf-8",
+    "headers": {
+      "content-language": "zh-HK"
+    },
+    "stages": {
+      "partial": {
+        "headers": {
+          "content-language": "en"
+        }
+      }
+    }
+  }
+}

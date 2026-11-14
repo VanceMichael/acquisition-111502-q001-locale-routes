@@ -1,0 +1,23 @@
+{
+  "deliveryId": "delivery-1",
+  "revision": "r1",
+  "roots": [
+    {
+      "href": "/files/catalog.html"
+    }
+  ],
+  "resources": [
+    {
+      "href": "/files/catalog.html",
+      "name": "catalog.html"
+    },
+    {
+      "href": "/files/en.html",
+      "name": "en.html"
+    },
+    {
+      "href": "/files/hk.html",
+      "name": "hk.html"
+    }
+  ]
+}
