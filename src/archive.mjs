@@ -14,8 +14,9 @@ export function identifier(value) {
 }
 
 export class Archive {
-  constructor(directory) {
+  constructor(directory, allowedOrigin = null) {
     this.directory = directory;
+    this.allowedOrigin = allowedOrigin;
     this.pending = Promise.resolve();
   }
 
@@ -47,7 +48,7 @@ export class Archive {
     }
   }
 
-  async receive({ collectionId, sourceKey, revision, mediaType, bytes, summary }) {
+  async receive({ collectionId, sourceKey, revision, mediaType, bytes, summary, trace }) {
     identifier(collectionId);
     if (typeof sourceKey !== 'string' || !sourceKey || typeof revision !== 'string' || !revision) {
       throw Object.assign(new Error('missing_source_identity'), { status: 400 });
@@ -71,7 +72,8 @@ export class Archive {
       await writeFile(join(this.directory, 'blobs', sha256), bytes, { flag: 'wx' }).catch(error => {
         if (error.code !== 'EEXIST') throw error;
       });
-      const receipt = { receiptId, collectionId, sourceKey, revision, mediaType, sha256, byteLength: bytes.length, summary };
+      const receipt = { receiptId, collectionId, sourceKey, revision, mediaType, sha256, byteLength: bytes.length, summary,
+        ...(trace ? { trace } : {}) };
       await this.saveJson(path, receipt);
       const collection = await this.collection(collectionId);
       collection.receiptIds.push(receiptId);
@@ -123,5 +125,17 @@ export class Archive {
 
   async list() {
     return (await readdir(join(this.directory, 'collections'))).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5));
+  }
+
+  // 自动接入专用的串行变更入口：与人工 addRecord 的同键不可变约定隔离，
+  // 来源语义驱动的“替换当前视图、保留历史观察”在这里实现。
+  async mutateCollection(collectionId, operation) {
+    identifier(collectionId);
+    return this.serialized(async () => {
+      const collection = await this.collection(collectionId);
+      const result = await operation(collection);
+      await this.saveJson(join(this.directory, 'collections', collectionId + '.json'), collection);
+      return result;
+    });
   }
 }

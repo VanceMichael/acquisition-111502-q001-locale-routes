@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { Archive } from './archive.mjs';
-import { retrieve } from './transport.mjs';
+import { retrieveDocument } from './transport.mjs';
 import { summarize } from './summary.mjs';
+import { acquireLanguageCatalog } from './catalog.mjs';
 
 export function json(response, status, value) {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -24,7 +25,7 @@ async function requestBody(request) {
 }
 
 export async function createService({ directory, allowedOrigin }) {
-  const archive = new Archive(directory);
+  const archive = new Archive(directory, allowedOrigin);
   await archive.initialize();
   const server = createServer(async (request, response) => {
     try {
@@ -53,10 +54,22 @@ export async function createService({ directory, allowedOrigin }) {
       if (request.method === 'POST' && url.pathname === '/acquisitions') {
         const body = await requestBody(request);
         if (typeof body.entry !== 'string') throw Object.assign(new Error('missing_entry'), { status: 400 });
-        const result = await retrieve(body.entry, allowedOrigin);
-        const receipt = await archive.receive({ collectionId: body.collectionId, sourceKey: body.entry, revision: result.revision,
-          mediaType: result.mediaType, bytes: result.bytes, summary: summarize(result.bytes, result.mediaType) });
-        return json(response, 201, { collectionId: body.collectionId, receiptIds: [receipt.receiptId] });
+        const collectionId = body.collectionId;
+        // 多语种目录：自动跟随来源内跳转并登记语言观察；非目录入口仍按原始领取处理。
+        // 先完成一次可追溯的领取（来源内跳转手动跟随），再判断入口是否为语言目录。
+        const result = await retrieveDocument(body.entry, allowedOrigin);
+        const catalogReceipt = await archive.receive({
+          collectionId, sourceKey: body.entry, revision: result.revision,
+          mediaType: result.mediaType, bytes: result.bytes, summary: summarize(result.bytes, result.mediaType),
+          trace: { requestedUrl: result.requestedUrl, finalUrl: result.finalUrl, redirected: result.redirected,
+            hops: result.hops, headers: result.headers },
+        });
+        const catalog = await acquireLanguageCatalog({ archive, collectionId, entry: body.entry,
+          seed: { document: result, receipt: catalogReceipt } });
+        if (catalog.recognized) {
+          return json(response, 201, { collectionId, receiptIds: catalog.receiptIds });
+        }
+        return json(response, 201, { collectionId, receiptIds: [catalogReceipt.receiptId] });
       }
       return json(response, 404, { error: 'not_found' });
     } catch (error) {

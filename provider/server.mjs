@@ -68,5 +68,9 @@ export function createProvider({ stage = 'complete' } = {}) {
       response.writeHead(500); response.end('provider_file_error');
     }
   });
-  return { server, requests };
+  return {
+    server,
+    requests,
+    setStage(next) { stage = next; },
+  };
 }
