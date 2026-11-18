@@ -2,9 +2,9 @@
 
 人工资料接收保持兼容。POST /intakes 的 JSON 字段为 collectionId、sourceKey、revision、mediaType、contentBase64；返回 receiptId、sha256、byteLength 和轻量 summary。相同资料集、来源键与修订对应同一收件，字节不同返回 409。GET /receipts/{receiptId} 可读元数据，GET /receipts/{receiptId}/body 返回原字节。
 
-POST /acquisitions 接受 collectionId、entry 和可选 options，entry 是授权来源完整地址。当前只领取入口的原始内容并登记收件，返回 collectionId 和 receiptIds。自动解释沿用此入口，所有自动取得的依赖也应保留真实原文收件，不用人工造 records 代替自动接入。来源访问只限启动时冻结的 origin，不能访问其他主机或执行交付件。
+POST /acquisitions 接受 collectionId、entry 和可选 options，entry 是授权来源完整地址。领取入口的原始内容并登记收件，返回 collectionId 和 receiptIds。入口是声明地区语言入口的目录页时，自动解释沿用此入口：跟随当前来源内的跳转与 alternate 链，每一跳（含 302 跳转）都登记真实原文收件，并按 docs/source-contract.md 写出 language-observation 与 product-body 记录，不用人工造 records 代替自动接入。自动记录同键的新观察会取代当前视图中的旧观察，旧观察移入 history 保留；人工 POST records 仍采用同键不可变约定。来源访问只限启动时冻结的 origin，不能访问其他主机或执行交付件。
 
-GET /collections 返回资料集列表，GET /collections/{collectionId} 返回 collectionId、receiptIds、records、issues。结构化 records 的每项包含 kind、key、value、provenance；key 由各来源身份语义决定，不要求特定内部编码。provenance 是含 receiptId 与 location 的数组，location 可采用字节区间、原行列、JSON Pointer 等可复查定位。issues 每项包含 reason、location，至少能说明原因、受影响范围和已有来源依据，不能用静默丢弃表示未知。缺失资料不等于来源明确删除。
+GET /collections 返回资料集列表，GET /collections/{collectionId} 返回 collectionId、receiptIds、records、issues、history。结构化 records 的每项包含 kind、key、value、provenance；key 由各来源身份语义决定，不要求特定内部编码。provenance 是含 receiptId 与 location 的数组，location 可采用字节区间、原行列、JSON Pointer 等可复查定位；自动记录的 location 使用原始字节的 UTF-8 偏移（byte:起-止）或响应头名（header:…），跳转与页面声明都可回到当时的收件核对。issues 每项包含 reason、location，至少能说明原因、受影响范围和已有来源依据，不能用静默丢弃表示未知。缺失资料不等于来源明确删除。
 
 POST /collections/{collectionId}/records 可录入人工确认记录，必须附本资料集的真实收件出处。自动接入不能依赖操作者事先写入答案。该接口目前采用同键不可变约定；新增版本、历史记录与当前视图如何协调，应与来源语义相符，不能覆盖已归档原文。来源契约中的值是查询视图契约，不限定解析器、状态机或索引的内部实现。
 

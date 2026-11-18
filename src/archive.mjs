@@ -40,14 +40,15 @@ export class Archive {
   async collection(collectionId) {
     identifier(collectionId);
     try {
-      return JSON.parse(await readFile(join(this.directory, 'collections', collectionId + '.json'), 'utf8'));
+      const stored = JSON.parse(await readFile(join(this.directory, 'collections', collectionId + '.json'), 'utf8'));
+      return { collectionId, receiptIds: [], records: [], issues: [], history: [], ...stored };
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
-      return { collectionId, receiptIds: [], records: [], issues: [] };
+      return { collectionId, receiptIds: [], records: [], issues: [], history: [] };
     }
   }
 
-  async receive({ collectionId, sourceKey, revision, mediaType, bytes, summary }) {
+  async receive({ collectionId, sourceKey, revision, mediaType, bytes, summary, headers }) {
     identifier(collectionId);
     if (typeof sourceKey !== 'string' || !sourceKey || typeof revision !== 'string' || !revision) {
       throw Object.assign(new Error('missing_source_identity'), { status: 400 });
@@ -72,6 +73,7 @@ export class Archive {
         if (error.code !== 'EEXIST') throw error;
       });
       const receipt = { receiptId, collectionId, sourceKey, revision, mediaType, sha256, byteLength: bytes.length, summary };
+      if (headers && typeof headers === 'object') receipt.headers = headers;
       await this.saveJson(path, receipt);
       const collection = await this.collection(collectionId);
       collection.receiptIds.push(receiptId);
@@ -95,20 +97,24 @@ export class Archive {
     return readFile(join(this.directory, 'blobs', receipt.sha256));
   }
 
-  async addRecord(collectionId, record) {
-    identifier(collectionId);
+  validateRecord(collectionId, record) {
     if (!record || typeof record.kind !== 'string' || typeof record.key !== 'string' || !record.value || typeof record.value !== 'object') {
       throw Object.assign(new Error('invalid_record'), { status: 400 });
     }
     if (!Array.isArray(record.provenance) || record.provenance.length === 0) {
       throw Object.assign(new Error('missing_provenance'), { status: 400 });
     }
-    for (const origin of record.provenance) {
+    return Promise.all(record.provenance.map(async origin => {
       const receipt = await this.receipt(origin.receiptId);
       if (receipt.collectionId !== collectionId || typeof origin.location !== 'string' || !origin.location) {
         throw Object.assign(new Error('provenance_scope'), { status: 400 });
       }
-    }
+    }));
+  }
+
+  async addRecord(collectionId, record) {
+    identifier(collectionId);
+    await this.validateRecord(collectionId, record);
     return this.serialized(async () => {
       const collection = await this.collection(collectionId);
       const match = collection.records.find(existing => existing.kind === record.kind && existing.key === record.key);
@@ -118,6 +124,31 @@ export class Archive {
       if (!match) collection.records.push(record);
       await this.saveJson(join(this.directory, 'collections', collectionId + '.json'), collection);
       return record;
+    });
+  }
+
+  // 自动解释的记录按来源语义更新：同键新观察取代当前视图，旧观察移入 history 保留，不归并其他语言。
+  async applyInterpretation(collectionId, { records = [], issues = [] } = {}) {
+    identifier(collectionId);
+    for (const record of records) await this.validateRecord(collectionId, record);
+    return this.serialized(async () => {
+      const collection = await this.collection(collectionId);
+      for (const record of records) {
+        const index = collection.records.findIndex(existing => existing.kind === record.kind && existing.key === record.key);
+        if (index === -1) {
+          collection.records.push(record);
+          continue;
+        }
+        const existing = collection.records[index];
+        if (JSON.stringify(existing) === JSON.stringify(record)) continue;
+        collection.history.push({ ...existing, supersededBy: { kind: record.kind, key: record.key } });
+        collection.records[index] = record;
+      }
+      for (const issue of issues) {
+        if (!collection.issues.some(existing => JSON.stringify(existing) === JSON.stringify(issue))) collection.issues.push(issue);
+      }
+      await this.saveJson(join(this.directory, 'collections', collectionId + '.json'), collection);
+      return collection;
     });
   }
 
